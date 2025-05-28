@@ -194,6 +194,22 @@ def test_cnn_scratch():
     # Forward propagation
     scratch_pred = cnn_scratch.forward(x_test_small)
     scratch_pred_classes = np.argmax(scratch_pred, axis=1)
+
+    # batch_size = 100
+    # keras_pred_classes = np.array([])
+    # scratch_pred_classes = np.array([])
+
+    # for batched input loop
+    # for i in range(0, len(x_test), batch_size):
+    #     end_idx = min(i + batch_size, len(x_test))
+    #     batched_input = x_test[i:end_idx]
+    #     # Keras forward propagation
+    #     keras_pred = keras_model.predict(batched_input)
+    #     keras_pred_classes.append(np.argmax(keras_pred, axis=1)) 
+
+    #     # Scratch implementation forward propagation
+    #     scratch_pred = cnn_scratch.forward(batched_input)
+    #     scratch_pred_classes = np.argmax(scratch_pred, axis=1)
     
     # Compare results
     print("=== COMPARISON RESULTS ===")
