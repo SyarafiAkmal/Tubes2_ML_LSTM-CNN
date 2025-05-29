@@ -2,7 +2,6 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, classification_report
 from utils.dataset_loader import DatasetLoader
@@ -52,7 +51,7 @@ class RNNKeras:
         print(f"Training set: {self.x_train.shape}")
         print(f"Validation set: {self.x_val.shape}")
         print(f"Test set: {self.x_test.shape}")
-        print(f"Vocabulary size: {self.vectorizer.vocabulary_size()}")
+        print(f"Vocabulary size: {self.tokenizer.vocabulary_size()}")
         
     def create_model(self, num_rnn_layers=2, rnn_units=[64, 32], bidirectional=True, embedding_dim=128):
         model = keras.Sequential()

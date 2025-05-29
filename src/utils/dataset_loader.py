@@ -1,10 +1,5 @@
 import os
 import pandas as pd
-import numpy as np
-import requests
-from sklearn.model_selection import train_test_split
-import zipfile
-import json
 
 class DatasetLoader:
     def __init__(self, data_dir="data"):
@@ -12,75 +7,76 @@ class DatasetLoader:
         os.makedirs(data_dir, exist_ok=True)
     
     def download_nusax_sentiment(self):
-        cache_file = os.path.join(self.data_dir, "nusax_sentiment.csv")
+        train_file = os.path.join(self.data_dir, "train.csv")
+        test_file = os.path.join(self.data_dir, "test.csv")
+        valid_file = os.path.join(self.data_dir, "valid.csv")
         
-        # Check if already cached
-        if os.path.exists(cache_file):
-            print(f"Loading cached dataset from {cache_file}")
-            return pd.read_csv(cache_file)
+        required_files = [train_file, test_file, valid_file]
+        missing_files = [f for f in required_files if not os.path.exists(f)]
         
-        print("Downloading NusaX-Sentiment dataset...")
+        if missing_files:
+            raise FileNotFoundError(f"Missing required dataset files: {missing_files}")
         
-        # For demonstration, create synthetic Indonesian sentiment data
-        # In real implementation, download from actual NusaX repository
-        texts = [
-            "Saya sangat senang dengan produk ini, kualitasnya luar biasa",
-            "Pelayanan yang buruk sekali, tidak memuaskan sama sekali", 
-            "Biasa saja tidak ada yang istimewa, standar",
-            "Luar biasa bagus sekali, sangat merekomendasikan",
-            "Mengecewakan tidak sesuai ekspektasi, jelek",
-            "Cukup baik untuk harga segini, worth it",
-            "Sangat memuaskan pelayanannya, excellent service",
-            "Tidak recommended sama sekali, waste of money",
-            "Lumayan bagus tapi bisa lebih baik lagi",
-            "Perfect sesuai dengan yang diharapkan, mantap",
-            "Produk berkualitas tinggi dengan harga terjangkau",
-            "Kecewa berat dengan pembelian ini",
-            "Tidak ada yang spesial dari produk ini",
-            "Sangat puas dengan hasil yang didapat",
-            "Buruk sekali, menyesal beli",
-            "Oke lah untuk harga segitu",
-            "Terbaik yang pernah saya beli",
-            "Mengecewakan banget, tidak sesuai deskripsi",
-            "Lumayan, tidak mengecewakan",
-            "Sempurna, exactly what I needed"
-        ] * 500
+        print("Loading dataset from CSV files...")
         
-        # Labels: 0=negative, 1=neutral, 2=positive  
-        labels = [2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] * 500
+        # load CSV files
+        train_df = pd.read_csv(train_file)
+        test_df = pd.read_csv(test_file)
+        valid_df = pd.read_csv(valid_file)
         
-        # Create DataFrame
-        df = pd.DataFrame({
-            'text': texts,
-            'label': labels
-        })
+        # validate columns
+        required_columns = ['id', 'text', 'label']
+        for df_name, df in [('train.csv', train_df), ('test.csv', test_df), ('valid.csv', valid_df)]:
+            missing_cols = [col for col in required_columns if col not in df.columns]
+            if missing_cols:
+                raise ValueError(f"{df_name} is missing required columns: {missing_cols}")
         
-        # Add some noise to make it more realistic
-        np.random.seed(42)
-        indices = np.random.permutation(len(df))
-        df = df.iloc[indices].reset_index(drop=True)
+        # convert text labels to numeric labels
+        # positive -> 2, neutral -> 1, negative -> 0
+        label_mapping = {'negative': 0, 'neutral': 1, 'positive': 2}
         
-        # Save to cache
-        df.to_csv(cache_file, index=False)
-        print(f"Dataset cached to {cache_file}")
+        def convert_labels(df, df_name):
+            df['label'] = df['label'].str.lower().str.strip()
+            
+            # check for unknown labels
+            unknown_labels = set(df['label'].unique()) - set(label_mapping.keys())
+            if unknown_labels:
+                print(f"Warning: Unknown labels in {df_name}: {unknown_labels}")
+                # leep only rows with known labels
+                df = df[df['label'].isin(label_mapping.keys())]
+            
+            df['label'] = df['label'].map(label_mapping)
+            return df
         
-        return df
+        train_df = convert_labels(train_df, 'train.csv')
+        test_df = convert_labels(test_df, 'test.csv')  
+        valid_df = convert_labels(valid_df, 'valid.csv')
+        
+        train_df['split'] = 'train'
+        test_df['split'] = 'test'
+        valid_df['split'] = 'valid'
+        
+        combined_df = pd.concat([train_df, test_df, valid_df], ignore_index=True)
+        
+        return combined_df
     
     def load_cifar10(self):
         from tensorflow import keras
         return keras.datasets.cifar10.load_data()
     
-    def prepare_text_data(self, df, test_size=0.3, val_size=0.5):
-        # Split into train and temp
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            df['text'].values, df['label'].values, 
-            test_size=test_size, random_state=42, stratify=df['label']
-        )
+    def prepare_text_data(self, df):
+        # extract data based on the 'split' column
+        train_data = df[df['split'] == 'train']
+        valid_data = df[df['split'] == 'valid']
+        test_data = df[df['split'] == 'test']
         
-        # Split temp into val and test
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, 
-            test_size=val_size, random_state=42, stratify=y_temp
-        )
+        X_train = train_data['text'].values
+        y_train = train_data['label'].values
+        
+        X_val = valid_data['text'].values
+        y_val = valid_data['label'].values
+        
+        X_test = test_data['text'].values
+        y_test = test_data['label'].values
         
         return X_train, X_val, X_test, y_train, y_val, y_test
