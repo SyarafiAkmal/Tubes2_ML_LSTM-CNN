@@ -8,6 +8,9 @@ from sklearn.metrics import f1_score, accuracy_score
 from tensorflow import keras
 from tensorflow.keras import layers
 
+# Import scratch implementations
+from cnn_scratch import CNNFromScratch
+
 # Set style for better plots
 plt.style.use('seaborn-v0_8')
 sns.set_palette("husl")
@@ -427,6 +430,14 @@ def analyze_cnn_hyperparameters(return_models=False):
         }
         print(f"\n✓ Best pooling type model saved: {model_filename}")
     
+    # ========== FORWARD PROPAGATION FROM SCRATCH TESTING ==========
+    print("\n" + "="*60)
+    print("TESTING FORWARD PROPAGATION FROM SCRATCH")
+    print("="*60)
+    
+    # Test CNN from scratch implementation
+    test_forward_propagation_cnn(saved_models, x_test, y_test)
+    
     # ========== PLOTTING ==========
     print("\n" + "="*60)
     print("PLOTTING TRAINING HISTORIES FOR EACH EXPERIMENT")
@@ -512,6 +523,52 @@ def analyze_cnn_hyperparameters(return_models=False):
         return df_results, saved_models
     else:
         return df_results
+
+def test_forward_propagation_cnn(saved_models, x_test, y_test):
+    """Test CNN forward propagation from scratch vs Keras"""
+    
+    print("\n--- Testing CNN Forward Propagation From Scratch ---")
+    
+    # Use a smaller test set for comparison
+    x_test_small = x_test[:100]
+    y_test_small = y_test[:100]
+    
+    for experiment, model_info in saved_models.items():
+        model_path = model_info['model']
+        
+        if os.path.exists(model_path):
+            print(f"\nTesting {experiment} model...")
+            
+            try:
+                # Load Keras model
+                keras_model = keras.models.load_model(model_path)
+                keras_pred = keras_model.predict(x_test_small, verbose=0)
+                keras_classes = np.argmax(keras_pred, axis=1)
+                
+                # Test scratch implementation
+                cnn_scratch = CNNFromScratch()
+                cnn_scratch.load_keras_model(keras_model)
+                
+                scratch_pred = cnn_scratch.forward(x_test_small)
+                scratch_classes = np.argmax(scratch_pred, axis=1)
+                
+                # Compare results
+                matches = np.sum(keras_classes == scratch_classes)
+                match_percentage = matches / len(keras_classes) * 100
+                
+                # Calculate F1 scores
+                keras_f1 = f1_score(y_test_small, keras_classes, average='macro')
+                scratch_f1 = f1_score(y_test_small, scratch_classes, average='macro')
+                
+                print(f"  Keras vs Scratch predictions match: {matches}/{len(keras_classes)} ({match_percentage:.1f}%)")
+                print(f"  Keras F1-Score: {keras_f1:.4f}")
+                print(f"  Scratch F1-Score: {scratch_f1:.4f}")
+                print(f"  F1-Score difference: {abs(keras_f1 - scratch_f1):.4f}")
+                
+            except Exception as e:
+                print(f"  Error testing {experiment}: {e}")
+        else:
+            print(f"  Model file not found: {model_path}")
 
 if __name__ == "__main__":
     # Create directories

@@ -9,18 +9,19 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.layers import TextVectorization
 
+# Import scratch implementations
+from lstm_scratch import LSTMFromScratch
+from utils.dataset_loader import DatasetLoader
+
 # Set style for better plots
 plt.style.use('seaborn-v0_8')
 sns.set_palette("husl")
 
-# Import custom modules
-from utils.dataset_loader import DatasetLoader
-
-def analyze_rnn_hyperparameters(return_models=False):
-    """RNN Hyperparameter Analysis with NusaX-Sentiment Dataset"""
+def analyze_lstm_hyperparameters(return_models=False):
+    """LSTM Hyperparameter Analysis with NusaX-Sentiment Dataset"""
     
     print("\n" + "="*60)
-    print("RNN HYPERPARAMETER ANALYSIS - NUSAX-SENTIMENT")
+    print("LSTM HYPERPARAMETER ANALYSIS - NUSAX-SENTIMENT")
     print("="*60)
     
     try:
@@ -60,19 +61,20 @@ def analyze_rnn_hyperparameters(return_models=False):
     training_histories = {}
     saved_models = {}
     
-    # ========== EXPERIMENT 1: Number of RNN Layers ==========
+    # ========== EXPERIMENT 1: Number of LSTM Layers ==========
     print("\n" + "="*50)
-    print("EXPERIMENT 1: TESTING NUMBER OF RNN LAYERS")
+    print("EXPERIMENT 1: TESTING NUMBER OF LSTM LAYERS")
     print("="*50)
     
     layer_variants = [
-        {'name': '1_rnn_layer', 'description': '1 RNN Layer', 'num_layers': 1},
-        {'name': '2_rnn_layers', 'description': '2 RNN Layers', 'num_layers': 2},
-        {'name': '3_rnn_layers', 'description': '3 RNN Layers', 'num_layers': 3}
+        {'name': '1_lstm_layer', 'description': '1 LSTM Layer', 'num_layers': 1},
+        {'name': '2_lstm_layers', 'description': '2 LSTM Layers', 'num_layers': 2},
+        {'name': '3_lstm_layers', 'description': '3 LSTM Layers', 'num_layers': 3}
     ]
     
     best_layer_model = None
     best_layer_f1 = 0
+    best_layer_name = ""
     
     for variant in layer_variants:
         print(f"\nTesting {variant['name']} - {variant['description']}...")
@@ -80,12 +82,13 @@ def analyze_rnn_hyperparameters(return_models=False):
         model = keras.Sequential()
         model.add(layers.Embedding(max_features, 128, input_length=sequence_length))
         
-        # Add RNN layers
+        # Add LSTM layers
         for i in range(variant['num_layers']):
-            return_sequences = (i < variant['num_layers'] - 1)  # Last layer returns sequence=False
-            model.add(layers.SimpleRNN(64, return_sequences=return_sequences))
-            if i < variant['num_layers'] - 1:  # Don't add dropout after last RNN layer
+            if i < variant['num_layers'] - 1:  # All layers except the last one return sequences
+                model.add(layers.LSTM(64, return_sequences=True))
                 model.add(layers.Dropout(0.3))
+            else:  # Last layer doesn't return sequences
+                model.add(layers.LSTM(64))
         
         model.add(layers.Dense(32, activation='relu'))
         model.add(layers.Dropout(0.5))
@@ -96,12 +99,12 @@ def analyze_rnn_hyperparameters(return_models=False):
                      metrics=['accuracy'])
         
         history = model.fit(X_train_vec, y_train,
-                          epochs=10,
+                          epochs=15,
                           batch_size=32,
                           validation_data=(X_val_vec, y_val),
                           verbose=1)
         
-        training_histories[f"rnn_layers_{variant['name']}"] = history.history
+        training_histories[f"lstm_layers_{variant['name']}"] = history.history
         
         # Evaluate on test set
         y_pred = model.predict(X_test_vec, verbose=0)
@@ -116,7 +119,7 @@ def analyze_rnn_hyperparameters(return_models=False):
             best_layer_name = variant['name']
         
         results.append({
-            'experiment': 'rnn_layers',
+            'experiment': 'lstm_layers',
             'variant': variant['name'],
             'description': variant['description'],
             'accuracy': accuracy,
@@ -132,18 +135,18 @@ def analyze_rnn_hyperparameters(return_models=False):
         os.makedirs('models', exist_ok=True)
         os.makedirs('weights', exist_ok=True)
         
-        model_filename = f'models/best_rnn_layers_{best_layer_name}.h5'
-        weights_filename = f'weights/best_rnn_layers_{best_layer_name}_weights.h5'
+        model_filename = f'models/best_lstm_layers_{best_layer_name}.h5'
+        weights_filename = f'weights/best_lstm_layers_{best_layer_name}_weights.h5'
         
         best_layer_model.save(model_filename)
         best_layer_model.save_weights(weights_filename)
         
-        saved_models['rnn_layers'] = {
+        saved_models['lstm_layers'] = {
             'model': model_filename,
             'weights': weights_filename,
             'f1_score': best_layer_f1
         }
-        print(f"\n✓ Best RNN layers model saved: {model_filename}")
+        print(f"\n✓ Best LSTM layers model saved: {model_filename}")
     
     # ========== EXPERIMENT 2: Number of Cells per Layer ==========
     print("\n" + "="*50)
@@ -158,15 +161,16 @@ def analyze_rnn_hyperparameters(return_models=False):
     
     best_cell_model = None
     best_cell_f1 = 0
+    best_cell_name = ""
     
     for variant in cell_variants:
         print(f"\nTesting {variant['name']} - {variant['description']}...")
         
         model = keras.Sequential([
             layers.Embedding(max_features, 128, input_length=sequence_length),
-            layers.SimpleRNN(variant['cells'], return_sequences=True),
+            layers.LSTM(variant['cells'], return_sequences=True),
             layers.Dropout(0.3),
-            layers.SimpleRNN(variant['cells']),
+            layers.LSTM(variant['cells']),
             layers.Dense(32, activation='relu'),
             layers.Dropout(0.5),
             layers.Dense(3, activation='softmax')
@@ -177,12 +181,12 @@ def analyze_rnn_hyperparameters(return_models=False):
                      metrics=['accuracy'])
         
         history = model.fit(X_train_vec, y_train,
-                          epochs=10,
+                          epochs=15,
                           batch_size=32,
                           validation_data=(X_val_vec, y_val),
                           verbose=1)
         
-        training_histories[f"rnn_cells_{variant['name']}"] = history.history
+        training_histories[f"lstm_cells_{variant['name']}"] = history.history
         
         y_pred = model.predict(X_test_vec, verbose=0)
         y_pred_classes = np.argmax(y_pred, axis=1)
@@ -196,7 +200,7 @@ def analyze_rnn_hyperparameters(return_models=False):
             best_cell_name = variant['name']
         
         results.append({
-            'experiment': 'rnn_cells',
+            'experiment': 'lstm_cells',
             'variant': variant['name'],
             'description': variant['description'],
             'accuracy': accuracy,
@@ -209,18 +213,18 @@ def analyze_rnn_hyperparameters(return_models=False):
     
     # Save best cell model
     if best_cell_model is not None:
-        model_filename = f'models/best_rnn_cells_{best_cell_name}.h5'
-        weights_filename = f'weights/best_rnn_cells_{best_cell_name}_weights.h5'
+        model_filename = f'models/best_lstm_cells_{best_cell_name}.h5'
+        weights_filename = f'weights/best_lstm_cells_{best_cell_name}_weights.h5'
         
         best_cell_model.save(model_filename)
         best_cell_model.save_weights(weights_filename)
         
-        saved_models['rnn_cells'] = {
+        saved_models['lstm_cells'] = {
             'model': model_filename,
             'weights': weights_filename,
             'f1_score': best_cell_f1
         }
-        print(f"\n✓ Best RNN cells model saved: {model_filename}")
+        print(f"\n✓ Best LSTM cells model saved: {model_filename}")
     
     # ========== EXPERIMENT 3: Bidirectional vs Unidirectional ==========
     print("\n" + "="*50)
@@ -228,12 +232,13 @@ def analyze_rnn_hyperparameters(return_models=False):
     print("="*50)
     
     direction_variants = [
-        {'name': 'unidirectional', 'description': 'Unidirectional RNN'},
-        {'name': 'bidirectional', 'description': 'Bidirectional RNN'}
+        {'name': 'unidirectional', 'description': 'Unidirectional LSTM'},
+        {'name': 'bidirectional', 'description': 'Bidirectional LSTM'}
     ]
     
     best_direction_model = None
     best_direction_f1 = 0
+    best_direction_name = ""
     
     for variant in direction_variants:
         print(f"\nTesting {variant['name']} - {variant['description']}...")
@@ -242,13 +247,13 @@ def analyze_rnn_hyperparameters(return_models=False):
         model.add(layers.Embedding(max_features, 128, input_length=sequence_length))
         
         if variant['name'] == 'bidirectional':
-            model.add(layers.Bidirectional(layers.SimpleRNN(64, return_sequences=True)))
+            model.add(layers.Bidirectional(layers.LSTM(64, return_sequences=True)))
             model.add(layers.Dropout(0.3))
-            model.add(layers.Bidirectional(layers.SimpleRNN(64)))
+            model.add(layers.Bidirectional(layers.LSTM(64)))
         else:
-            model.add(layers.SimpleRNN(64, return_sequences=True))
+            model.add(layers.LSTM(64, return_sequences=True))
             model.add(layers.Dropout(0.3))
-            model.add(layers.SimpleRNN(64))
+            model.add(layers.LSTM(64))
         
         model.add(layers.Dense(32, activation='relu'))
         model.add(layers.Dropout(0.5))
@@ -259,12 +264,12 @@ def analyze_rnn_hyperparameters(return_models=False):
                      metrics=['accuracy'])
         
         history = model.fit(X_train_vec, y_train,
-                          epochs=10,
+                          epochs=15,
                           batch_size=32,
                           validation_data=(X_val_vec, y_val),
                           verbose=1)
         
-        training_histories[f"rnn_direction_{variant['name']}"] = history.history
+        training_histories[f"lstm_direction_{variant['name']}"] = history.history
         
         y_pred = model.predict(X_test_vec, verbose=0)
         y_pred_classes = np.argmax(y_pred, axis=1)
@@ -278,7 +283,7 @@ def analyze_rnn_hyperparameters(return_models=False):
             best_direction_name = variant['name']
         
         results.append({
-            'experiment': 'rnn_direction',
+            'experiment': 'lstm_direction',
             'variant': variant['name'],
             'description': variant['description'],
             'accuracy': accuracy,
@@ -291,38 +296,46 @@ def analyze_rnn_hyperparameters(return_models=False):
     
     # Save best direction model
     if best_direction_model is not None:
-        model_filename = f'models/best_rnn_direction_{best_direction_name}.h5'
-        weights_filename = f'weights/best_rnn_direction_{best_direction_name}_weights.h5'
+        model_filename = f'models/best_lstm_direction_{best_direction_name}.h5'
+        weights_filename = f'weights/best_lstm_direction_{best_direction_name}_weights.h5'
         
         best_direction_model.save(model_filename)
         best_direction_model.save_weights(weights_filename)
         
-        saved_models['rnn_direction'] = {
+        saved_models['lstm_direction'] = {
             'model': model_filename,
             'weights': weights_filename,
             'f1_score': best_direction_f1
         }
-        print(f"\n✓ Best RNN direction model saved: {model_filename}")
+        print(f"\n✓ Best LSTM direction model saved: {model_filename}")
+    
+    # ========== FORWARD PROPAGATION FROM SCRATCH TESTING ==========
+    print("\n" + "="*60)
+    print("TESTING FORWARD PROPAGATION FROM SCRATCH")
+    print("="*60)
+    
+    # Test LSTM from scratch implementation
+    test_forward_propagation_lstm(saved_models, X_test_vec, y_test)
     
     # ========== PLOTTING ==========
     print("\n" + "="*50)
-    print("PLOTTING RNN TRAINING HISTORIES")
+    print("PLOTTING LSTM TRAINING HISTORIES")
     print("="*50)
     
-    experiments = ['rnn_layers', 'rnn_cells', 'rnn_direction']
+    experiments = ['lstm_layers', 'lstm_cells', 'lstm_direction']
     experiment_titles = [
-        'Number of RNN Layers',
+        'Number of LSTM Layers',
         'Number of Cells per Layer',
         'Bidirectional vs Unidirectional'
     ]
     
     for exp, title in zip(experiments, experiment_titles):
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-        fig.suptitle(f'RNN Experiment: {title} - Training History', fontsize=14)
+        fig.suptitle(f'LSTM Experiment: {title} - Training History', fontsize=14)
         
         for key, history in training_histories.items():
-            if exp in key:
-                variant_name = key.replace(f'{exp}_', '').replace('_', ' ').title()
+            if key.startswith(exp):
+                variant_name = key.replace(f"{exp}_", "").replace("_", " ").title()
                 epochs = range(1, len(history['loss']) + 1)
                 
                 ax1.plot(epochs, history['loss'], label=variant_name, marker='o', markersize=3)
@@ -341,12 +354,12 @@ def analyze_rnn_hyperparameters(return_models=False):
         ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(f'plots/rnn_{exp}_training_history.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'plots/lstm_{exp}_training_history.png', dpi=300, bbox_inches='tight')
         plt.show()
     
     # Print results summary
     print("\n" + "="*50)
-    print("RNN EXPERIMENT RESULTS SUMMARY")
+    print("LSTM EXPERIMENT RESULTS SUMMARY")
     print("="*50)
     
     df_results = pd.DataFrame(results)
@@ -360,27 +373,80 @@ def analyze_rnn_hyperparameters(return_models=False):
         print(f"  F1-Score: {best_variant['f1_score']:.4f}")
         print(f"  Accuracy: {best_variant['accuracy']:.4f}")
         
-        # Print conclusions based on experiment
-        if experiment == 'rnn_layers':
-            print(f"  📊 CONCLUSION - RNN Layers Impact:")
-            print(f"     Adding more RNN layers increases the model's capacity to learn")
-            print(f"     sequential patterns but may lead to vanishing gradient problems.")
-        elif experiment == 'rnn_cells':
-            print(f"  📊 CONCLUSION - RNN Cells Impact:")
-            print(f"     More cells increase the model's representational capacity")
-            print(f"     but require more data and computational resources.")
-        elif experiment == 'rnn_direction':
-            print(f"  📊 CONCLUSION - RNN Direction Impact:")
-            print(f"     Bidirectional RNNs capture context from both past and future")
-            print(f"     but double the parameters and cannot be used for real-time tasks.")
+        # Print conclusions
+        if experiment == 'lstm_layers':
+            print(f"  📊 CONCLUSION - LSTM Layers Impact:")
+            print(f"     Adding more LSTM layers generally improves feature extraction")
+            print(f"     but may lead to overfitting with limited data.")
+        elif experiment == 'lstm_cells':
+            print(f"  📊 CONCLUSION - LSTM Cells Impact:")
+            print(f"     More cells increase model capacity but require more data")
+            print(f"     to avoid overfitting and increase computational cost.")
+        elif experiment == 'lstm_direction':
+            print(f"  📊 CONCLUSION - LSTM Direction Impact:")
+            print(f"     Bidirectional LSTMs capture context from both directions")
+            print(f"     but double the parameters and computational cost.")
     
-    print(f"\nRNN Hyperparameter Analysis Complete!")
+    print("\n" + "="*50)
+    print("WEIGHT SAVING SUMMARY")
+    print("="*50)
+    for exp, info in saved_models.items():
+        print(f"✓ {exp}: {info['model']} (F1: {info['f1_score']:.4f})")
+    
+    print(f"\nLSTM Hyperparameter Analysis Complete!")
     print(f"✓ All model weights saved in weights/ directory")
+    print(f"✓ Training history plots saved in plots/ directory")
     
     if return_models:
-        return df_results, saved_models
+        return results, saved_models
     else:
         return df_results
+
+def test_forward_propagation_lstm(saved_models, X_test_vec, y_test):
+    """Test LSTM forward propagation from scratch vs Keras"""
+    
+    print("\n--- Testing LSTM Forward Propagation From Scratch ---")
+    
+    # Use a smaller test set for comparison
+    X_test_small = X_test_vec[:50]
+    y_test_small = y_test[:50]
+    
+    for experiment, model_info in saved_models.items():
+        model_path = model_info['model']
+        
+        if os.path.exists(model_path):
+            print(f"\nTesting {experiment} model...")
+            
+            try:
+                # Load Keras model
+                keras_model = keras.models.load_model(model_path)
+                keras_pred = keras_model.predict(X_test_small, verbose=0)
+                keras_classes = np.argmax(keras_pred, axis=1)
+                
+                # Test scratch implementation
+                lstm_scratch = LSTMFromScratch()
+                lstm_scratch.load_keras_model(model_path)
+                
+                scratch_pred = lstm_scratch.forward(X_test_small)
+                scratch_classes = np.argmax(scratch_pred, axis=1)
+                
+                # Compare results
+                matches = np.sum(keras_classes == scratch_classes)
+                match_percentage = matches / len(keras_classes) * 100
+                
+                # Calculate F1 scores
+                keras_f1 = f1_score(y_test_small, keras_classes, average='macro')
+                scratch_f1 = f1_score(y_test_small, scratch_classes, average='macro')
+                
+                print(f"  Keras vs Scratch predictions match: {matches}/{len(keras_classes)} ({match_percentage:.1f}%)")
+                print(f"  Keras F1-Score: {keras_f1:.4f}")
+                print(f"  Scratch F1-Score: {scratch_f1:.4f}")
+                print(f"  F1-Score difference: {abs(keras_f1 - scratch_f1):.4f}")
+                
+            except Exception as e:
+                print(f"  Error testing {experiment}: {e}")
+        else:
+            print(f"  Model file not found: {model_path}")
 
 if __name__ == "__main__":
     # Create directories
@@ -388,7 +454,7 @@ if __name__ == "__main__":
     os.makedirs('weights', exist_ok=True)
     os.makedirs('plots', exist_ok=True)
     
-    print("\n🔥 Running RNN analysis with NusaX-Sentiment...")
-    rnn_results = analyze_rnn_hyperparameters()
+    print("\n🔥 Running LSTM analysis with NusaX-Sentiment...")
+    lstm_results = analyze_lstm_hyperparameters()
     
-    print("\nRNN Analysis Complete!")
+    print("\nLSTM Analysis Complete!")
