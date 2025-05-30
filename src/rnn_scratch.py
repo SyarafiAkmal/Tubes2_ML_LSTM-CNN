@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import pickle
 
 class EmbeddingLayer:
     def __init__(self, weights):
@@ -96,7 +95,9 @@ class DenseLayer:
     def forward(self, x):
         output = np.dot(x, self.weights) + self.bias
         
-        if self.activation == 'softmax':
+        if self.activation == 'relu':
+            output = np.maximum(0, output)
+        elif self.activation == 'softmax':
             exp_scores = np.exp(output - np.max(output, axis=1, keepdims=True))
             output = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
         
@@ -122,22 +123,23 @@ class RNNFromScratch:
                 self.layers.append(SimpleRNNLayer([weights[0], weights[1]], bias, return_sequences))
             
             elif isinstance(layer, tf.keras.layers.Bidirectional):
-                rnn_layer = layer.layer
-                if isinstance(rnn_layer, tf.keras.layers.SimpleRNN):
-                    weights = layer.get_weights()
-                    num_weights_per_direction = len(weights) // 2
-                    forward_weights = weights[:num_weights_per_direction]
-                    backward_weights = weights[num_weights_per_direction:]
-                    
-                    forward_bias = forward_weights[2] if len(forward_weights) > 2 else np.zeros(forward_weights[1].shape[0])
-                    backward_bias = backward_weights[2] if len(backward_weights) > 2 else np.zeros(backward_weights[1].shape[0])
-                    
-                    return_sequences = rnn_layer.return_sequences
-                    self.layers.append(BidirectionalRNNLayer(
-                        [forward_weights[0], forward_weights[1]], forward_bias,
-                        [backward_weights[0], backward_weights[1]], backward_bias,
-                        return_sequences
-                    ))
+                weights = layer.get_weights()
+
+                forward_weights = [weights[0], weights[1]]
+                forward_bias = weights[2]
+                backward_weights = [weights[3], weights[4]]
+                backward_bias = weights[5]
+
+                forward_bias = forward_weights[2] if len(forward_weights) > 2 else np.zeros(forward_weights[1].shape[0])
+                backward_bias = backward_weights[2] if len(backward_weights) > 2 else np.zeros(backward_weights[1].shape[0])
+
+                return_sequences = layer.return_sequences
+
+                self.layers.append(BidirectionalRNNLayer(
+                    [forward_weights[0], forward_weights[1]], forward_bias,
+                    [backward_weights[0], backward_weights[1]], backward_bias,
+                    return_sequences
+                ))
             
             elif isinstance(layer, tf.keras.layers.Dropout):
                 rate = layer.rate
@@ -148,7 +150,7 @@ class RNNFromScratch:
                 activation = layer.activation.__name__ if layer.activation else None
                 self.layers.append(DenseLayer(weights, bias, activation))
         
-        print(f"Loaded {len(self.layers)} layers from Keras model")
+        print(f"✓ Loaded {len(self.layers)} layers from Keras model")
     
     def forward(self, x, training=False):
         output = x
@@ -158,7 +160,6 @@ class RNNFromScratch:
                 output = layer.forward(output, training)
             else:
                 output = layer.forward(output)
-            print(f"Layer {i} ({type(layer).__name__}) output shape: {output.shape}")
         
         return output
     
@@ -168,51 +169,3 @@ class RNNFromScratch:
     
     def predict_proba(self, x):
         return self.forward(x, training=False)
-    
-    def save_weights(self, filepath):
-        with open(filepath, 'wb') as f:
-            pickle.dump(self.layers, f)
-    
-    def load_weights(self, filepath):
-        with open(filepath, 'rb') as f:
-            self.layers = pickle.load(f)
-
-def test_rnn_scratch():
-    # dummy data
-    batch_size = 10
-    seq_length = 20
-    vocab_size = 1000
-    
-    # Generate random token sequences
-    x_test = np.random.randint(0, vocab_size, (batch_size, seq_length))
-    y_test = np.random.randint(0, 3, batch_size)
-    
-    try:
-        # laod model
-        keras_model = keras.models.load_model('models/rnn_layers_2.h5')
-        keras_pred = keras_model.predict(x_test)
-        keras_pred_classes = np.argmax(keras_pred, axis=1)
-        
-        rnn_scratch = RNNFromScratch()
-        rnn_scratch.load_keras_model('models/rnn_layers_2.h5')
-        
-        # forward propagation
-        scratch_pred = rnn_scratch.forward(x_test)
-        scratch_pred_classes = np.argmax(scratch_pred, axis=1)
-        
-        print("=== RNN COMPARISON RESULTS ===")
-        print(f"Keras predictions: {keras_pred_classes}")
-        print(f"Scratch predictions: {scratch_pred_classes}")
-        
-        # matching prediction
-        matches = np.sum(keras_pred_classes == scratch_pred_classes)
-        print(f"Matching predictions: {matches}/{len(keras_pred_classes)} ({matches/len(keras_pred_classes)*100:.2f}%)")
-        
-        return rnn_scratch
-        
-    except FileNotFoundError:
-        print("Model file not found. Please run RNN training first.")
-        return None
-
-if __name__ == "__main__":
-    test_rnn_scratch()
