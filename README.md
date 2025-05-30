@@ -20,5 +20,5 @@ pip install -r requirements.txt
 
 ## Cara Menjalankan
 
-Jalankan {model}_analysis.py
+Jalankan main_{model}.py
 
