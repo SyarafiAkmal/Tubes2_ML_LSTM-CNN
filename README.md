@@ -14,20 +14,11 @@ Proyek ini mengimplementasikan forward propagation untuk:
 
 1. Clone repository ini:
 2. Install dependencies:
-\`\`\`bash
+```
 pip install -r requirements.txt
-\`\`\`
+```
 
 ## Cara Menjalankan
 
-### Menjalankan Eksperimen Modular
-
-\`\`\`bash
-cd src
-
-# Menjalankan semua eksperimen
-python main.py --model all
-
-# Menjalankan hanya LSTM
-python main.py --model lstm
+Jalankan {model}_analysis.py
 
