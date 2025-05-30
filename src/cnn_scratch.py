@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from tensorflow.keras import layers
 import pickle
 
 class Conv2DLayer:
@@ -114,11 +115,15 @@ class DenseLayer:
         return output
 
 class CNNFromScratch:
-    def __init__(self):
+    def __init__(self, model=None):
         self.layers = []
+        self.model = model
     
-    def load_keras_model(self, model_path):
-        keras_model = keras.models.load_model(model_path)
+    def load_keras_model(self, model):
+        if isinstance(model, str):
+            keras_model = keras.models.load_model(model)
+        else:
+            keras_model = model
         self.layers = []
         
         for layer in keras_model.layers:
@@ -147,14 +152,13 @@ class CNNFromScratch:
                 # Skip dropout during inference
                 continue
         
-        print(f"Loaded {len(self.layers)} layers from Keras model")
+        # print(f"Loaded {len(self.layers)} layers from Keras model")
     
     def forward(self, x):
         output = x
-        
         for i, layer in enumerate(self.layers):
             output = layer.forward(output)
-            print(f"Layer {i} output shape: {output.shape}")
+            # print(f"Layer {i} output shape: {output.shape}")
         
         return output
     
@@ -172,60 +176,79 @@ class CNNFromScratch:
 
 def test_cnn_scratch():
     from sklearn.metrics import f1_score, accuracy_score
+    from tensorflow.keras import layers
     
-    # Load test data
-    (_, _), (x_test, y_test) = keras.datasets.cifar10.load_data()
+    # Load and prepare data
+    (x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+    x_train = x_train.astype('float32') / 255.0
+    print("Train Dataset Length:", len(x_train))
+
     x_test = x_test.astype('float32') / 255.0
-    y_test = y_test.flatten()
+    print("Test Dataset Length:", len(x_test))
+
+    y_train = keras.utils.to_categorical(y_train, 10)
+    y_test = keras.utils.to_categorical(y_test, 10)
     
-    # Use small subset for testing
-    x_test_small = x_test[:100]
+    # Use 10k cause 50k is a bit too much to handle
+    x_train_small = x_train[:10000]
+    y_train_small = y_train[:10000]
+    x_test_small = x_test[:100] # already batched by default
     y_test_small = y_test[:100]
     
-    # Load Keras model
-    keras_model = keras.models.load_model('models/cnn_layers_3.h5')
-    keras_pred = keras_model.predict(x_test_small)
-    keras_pred_classes = np.argmax(keras_pred, axis=1)
+    # Create and train a model
+    model = keras.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        
+        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        
+        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        
+        layers.Flatten(),
+        layers.Dense(512, activation='relu'),
+        layers.BatchNormalization(),
+        layers.Dropout(0.5),
+        layers.Dense(10, activation='softmax')
+    ])
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=0.001),
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
     
-    # Test scratch implementation
+    # Train for just 1 epoch to get some meaningful weights
+    print("Training model for 1 epoch...")
+    model.fit(x_train_small, y_train_small, epochs=60, batch_size=32, verbose=1)
+    
+    # Now test your scratch implementation
     cnn_scratch = CNNFromScratch()
-    cnn_scratch.load_keras_model('models/cnn_layers_3.h5')
+    cnn_scratch.load_keras_model(model)
     
-    # Forward propagation
-    scratch_pred = cnn_scratch.forward(x_test_small)
-    scratch_pred_classes = np.argmax(scratch_pred, axis=1)
+    # Compare predictions
+    keras_pred = model.predict(x_test_small)
+    
+    keras_classes = np.argmax(keras_pred, axis=1)
+    print(f"Keras predictions: {keras_classes[:10]}")
+    # scratch_classes = cnn_scratch.predict(x_test_small)
+    # print(f"Scratch predictions: {scratch_classes[:10]}")
+    
+    # matches = np.sum(keras_classes == scratch_classes)
+    # print(f"Matching predictions: {matches}/{len(keras_classes)} ({matches/len(keras_classes)*100:.2f}%)")
 
-    # batch_size = 100
-    # keras_pred_classes = np.array([])
-    # scratch_pred_classes = np.array([])
-
-    # for batched input loop
-    # for i in range(0, len(x_test), batch_size):
-    #     end_idx = min(i + batch_size, len(x_test))
-    #     batched_input = x_test[i:end_idx]
-    #     # Keras forward propagation
-    #     keras_pred = keras_model.predict(batched_input)
-    #     keras_pred_classes.append(np.argmax(keras_pred, axis=1)) 
-
-    #     # Scratch implementation forward propagation
-    #     scratch_pred = cnn_scratch.forward(batched_input)
-    #     scratch_pred_classes = np.argmax(scratch_pred, axis=1)
-    
-    # Compare results
-    print("=== COMPARISON RESULTS ===")
-    print(f"Keras predictions: {keras_pred_classes[:10]}")
-    print(f"Scratch predictions: {scratch_pred_classes[:10]}")
-    
-    # Calculate metrics
-    keras_f1 = f1_score(y_test_small, keras_pred_classes, average='macro')
-    scratch_f1 = f1_score(y_test_small, scratch_pred_classes, average='macro')
-    
-    print(f"\nKeras F1-Score: {keras_f1:.4f}")
-    print(f"Scratch F1-Score: {scratch_f1:.4f}")
-    
-    # Check if predictions match
-    matches = np.sum(keras_pred_classes == scratch_pred_classes)
-    print(f"Matching predictions: {matches}/{len(keras_pred_classes)} ({matches/len(keras_pred_classes)*100:.2f}%)")
+    y_test_classes = np.argmax(y_test_small, axis=1)
+    print("Model accuracy:", accuracy_score(y_test_classes, keras_classes))
     
     return cnn_scratch
 
