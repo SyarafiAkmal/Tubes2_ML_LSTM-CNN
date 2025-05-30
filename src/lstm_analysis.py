@@ -136,7 +136,7 @@ def analyze_lstm_hyperparameters(return_models=False):
         os.makedirs('weights', exist_ok=True)
         
         model_filename = f'models/best_lstm_layers_{best_layer_name}.h5'
-        weights_filename = f'weights/best_lstm_layers_{best_layer_name}_weights.h5'
+        weights_filename = f'weights/best_lstm_layers_{best_layer_name}.weights.h5'
         
         best_layer_model.save(model_filename)
         best_layer_model.save_weights(weights_filename)
@@ -214,7 +214,7 @@ def analyze_lstm_hyperparameters(return_models=False):
     # Save best cell model
     if best_cell_model is not None:
         model_filename = f'models/best_lstm_cells_{best_cell_name}.h5'
-        weights_filename = f'weights/best_lstm_cells_{best_cell_name}_weights.h5'
+        weights_filename = f'weights/best_lstm_cells_{best_cell_name}.weights.h5'
         
         best_cell_model.save(model_filename)
         best_cell_model.save_weights(weights_filename)
@@ -297,7 +297,7 @@ def analyze_lstm_hyperparameters(return_models=False):
     # Save best direction model
     if best_direction_model is not None:
         model_filename = f'models/best_lstm_direction_{best_direction_name}.h5'
-        weights_filename = f'weights/best_lstm_direction_{best_direction_name}_weights.h5'
+        weights_filename = f'weights/best_lstm_direction_{best_direction_name}.weights.h5'
         
         best_direction_model.save(model_filename)
         best_direction_model.save_weights(weights_filename)

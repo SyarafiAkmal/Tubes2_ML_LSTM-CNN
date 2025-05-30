@@ -162,7 +162,7 @@ def analyze_cnn_hyperparameters(return_models=False):
         os.makedirs('weights', exist_ok=True)
         
         model_filename = f'models/best_conv_layers_{best_conv_name}.h5'
-        weights_filename = f'weights/best_conv_layers_{best_conv_name}_weights.h5'
+        weights_filename = f'weights/best_conv_layers_{best_conv_name}.weights.h5'
         
         best_conv_model.save(model_filename)
         best_conv_model.save_weights(weights_filename)
@@ -245,7 +245,7 @@ def analyze_cnn_hyperparameters(return_models=False):
     # Save best filter model
     if best_filter_model is not None:
         model_filename = f'models/best_filter_count_{best_filter_name}.h5'
-        weights_filename = f'weights/best_filter_count_{best_filter_name}_weights.h5'
+        weights_filename = f'weights/best_filter_count_{best_filter_name}.weights.h5'
         
         best_filter_model.save(model_filename)
         best_filter_model.save_weights(weights_filename)
@@ -328,7 +328,7 @@ def analyze_cnn_hyperparameters(return_models=False):
     # Save best kernel model
     if best_kernel_model is not None:
         model_filename = f'models/best_kernel_size_{best_kernel_name}.h5'
-        weights_filename = f'weights/best_kernel_size_{best_kernel_name}_weights.h5'
+        weights_filename = f'weights/best_kernel_size_{best_kernel_name}.weights.h5'
         
         best_kernel_model.save(model_filename)
         best_kernel_model.save_weights(weights_filename)
@@ -418,7 +418,7 @@ def analyze_cnn_hyperparameters(return_models=False):
     # Save best pooling model
     if best_pooling_model is not None:
         model_filename = f'models/best_pooling_type_{best_pooling_name}.h5'
-        weights_filename = f'weights/best_pooling_type_{best_pooling_name}_weights.h5'
+        weights_filename = f'weights/best_pooling_type_{best_pooling_name}.weights.h5'
         
         best_pooling_model.save(model_filename)
         best_pooling_model.save_weights(weights_filename)
