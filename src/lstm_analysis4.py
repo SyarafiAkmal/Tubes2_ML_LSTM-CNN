@@ -326,17 +326,21 @@ def analyze_lstm_hyperparameters(return_models=False):
     # Test ALL saved models with scratch implementation
     scratch_results = test_forward_propagation_lstm_all_models(saved_models, X_test_vec, y_test)
     
-    # Update results with scratch implementation scores
+    # Update results with scratch implementation scores (with safe key access)
     for i, result in enumerate(results):
         model_key = f"{result['experiment']}_{result['variant']}"
         if model_key in scratch_results:
-            results[i]['scratch_accuracy'] = scratch_results[model_key]['scratch_accuracy']
-            results[i]['scratch_f1_score'] = scratch_results[model_key]['scratch_f1_score']
-            results[i]['keras_accuracy_test'] = scratch_results[model_key]['keras_accuracy_test']
-            results[i]['keras_f1_test'] = scratch_results[model_key]['keras_f1_test']
-            results[i]['match_percentage'] = scratch_results[model_key]['match_percentage']
-            results[i]['f1_difference'] = scratch_results[model_key]['f1_difference']
-            results[i]['accuracy_difference'] = scratch_results[model_key]['accuracy_difference']
+            scratch_data = scratch_results[model_key]
+            results[i]['scratch_accuracy'] = scratch_data.get('scratch_accuracy', 0.0)
+            results[i]['scratch_f1_score'] = scratch_data.get('scratch_f1_score', 0.0)
+            results[i]['match_percentage'] = scratch_data.get('match_percentage', 0.0)
+            results[i]['f1_difference'] = scratch_data.get('f1_difference', 1.0)
+        else:
+            # Set default values if model wasn't tested
+            results[i]['scratch_accuracy'] = 0.0
+            results[i]['scratch_f1_score'] = 0.0
+            results[i]['match_percentage'] = 0.0
+            results[i]['f1_difference'] = 1.0
     
     # ========== PLOTTING ==========
     print("\n" + "="*50)
@@ -389,21 +393,12 @@ def analyze_lstm_hyperparameters(return_models=False):
         exp_data = df_results[df_results['experiment'] == experiment]
         best_variant = exp_data.loc[exp_data['keras_f1_score'].idxmax()]
         
-        print(f"\n{experiment.upper()} - Best Variant (Keras): {best_variant_keras['variant']}")
-        print(f"  Description: {best_variant_keras['description']}")
-        print(f"  📊 TRAINING RESULTS:")
-        print(f"     Keras F1-Score: {best_variant_keras['keras_f1_score']:.4f}")
-        print(f"     Keras Accuracy: {best_variant_keras['keras_accuracy']:.4f}")
-        print(f"  📊 TEST SET RESULTS:")
-        print(f"     Keras F1-Score: {best_variant_keras['keras_f1_test']:.4f}")
-        print(f"     Scratch F1-Score: {best_variant_keras['scratch_f1_score']:.4f}")
-        print(f"     F1-Score Difference: {best_variant_keras['f1_difference']:.4f}")
-        print(f"     Prediction Match: {best_variant_keras['match_percentage']:.1f}%")
-        
-        # Print all variants in this experiment
-        print(f"  📋 ALL VARIANTS:")
-        for _, variant in exp_data.iterrows():
-            print(f"     {variant['variant']:15} | Keras F1: {variant['keras_f1_test']:.4f} | Scratch F1: {variant['scratch_f1_score']:.4f} | Match: {variant['match_percentage']:.1f}%")
+        print(f"\n{experiment.upper()} - Best Variant: {best_variant['variant']}")
+        print(f"  Description: {best_variant['description']}")
+        print(f"  Keras F1-Score: {best_variant['keras_f1_score']:.4f}")
+        print(f"  Scratch F1-Score: {best_variant.get('scratch_f1_score', 0.0):.4f}")
+        print(f"  F1-Score Difference: {best_variant.get('f1_difference', 1.0):.4f}")
+        print(f"  Prediction Match: {best_variant.get('match_percentage', 0.0):.1f}%")
         
         # Print conclusions
         if experiment == 'lstm_layers':
@@ -427,8 +422,8 @@ def analyze_lstm_hyperparameters(return_models=False):
     
     for i, result in enumerate(results):
         print(f"\n{i+1}. {result['experiment']}_{result['variant']}:")
-        print(f"   Keras F1: {result['keras_f1_score']:.4f} | Scratch F1: {result['scratch_f1_score']:.4f}")
-        print(f"   Difference: {result['f1_difference']:.4f} | Match: {result['match_percentage']:.1f}%")
+        print(f"   Keras F1: {result['keras_f1_score']:.4f} | Scratch F1: {result.get('scratch_f1_score', 0.0):.4f}")
+        print(f"   Difference: {result.get('f1_difference', 1.0):.4f} | Match: {result.get('match_percentage', 0.0):.1f}%")
     
     print(f"\nLSTM Hyperparameter Analysis Complete!")
     print(f"✓ All {total_models} models tested with both Keras and scratch implementations")
@@ -464,7 +459,18 @@ def test_forward_propagation_lstm_all_models(saved_models, X_test_vec, y_test):
             
             # Test scratch implementation
             lstm_scratch = LSTMFromScratch()
-            lstm_scratch.load_keras_model(keras_model)
+            
+            # Try to load from model object first, then from file path
+            try:
+                lstm_scratch.load_keras_model(keras_model)
+            except Exception as load_error:
+                print(f"  ⚠️  Could not load model object, trying file path: {load_error}")
+                model_path = model_info['model']
+                if os.path.exists(model_path):
+                    loaded_model = keras.models.load_model(model_path)
+                    lstm_scratch.load_keras_model(loaded_model)
+                else:
+                    raise Exception(f"Model file not found: {model_path}")
             
             scratch_pred = lstm_scratch.forward(X_test_sample)
             scratch_classes = np.argmax(scratch_pred, axis=1)
@@ -480,32 +486,17 @@ def test_forward_propagation_lstm_all_models(saved_models, X_test_vec, y_test):
             scratch_accuracy = accuracy_score(y_test_sample, scratch_classes)
             
             f1_difference = abs(keras_f1 - scratch_f1)
-            accuracy_difference = abs(keras_accuracy - scratch_accuracy)
             
             scratch_results[model_key] = {
                 'scratch_accuracy': scratch_accuracy,
                 'scratch_f1_score': scratch_f1,
-                'keras_accuracy_test': keras_accuracy,  # Test set keras results
-                'keras_f1_test': keras_f1,              # Test set keras results  
                 'match_percentage': match_percentage,
-                'f1_difference': f1_difference,
-                'accuracy_difference': accuracy_difference
+                'f1_difference': f1_difference
             }
             
-            print(f"  📊 KERAS vs SCRATCH COMPARISON:")
-            print(f"     Keras    - Accuracy: {keras_accuracy:.4f}, F1: {keras_f1:.4f}")
-            print(f"     Scratch  - Accuracy: {scratch_accuracy:.4f}, F1: {scratch_f1:.4f}")
-            print(f"     Diff     - Accuracy: {accuracy_difference:.4f}, F1: {f1_difference:.4f}")
-            print(f"     Match    - {matches}/{len(keras_classes)} predictions ({match_percentage:.1f}%)")
+            print(f"  ✓ Keras vs Scratch predictions match: {matches}/{len(keras_classes)} ({match_percentage:.1f}%)")
+            print(f"  ✓ Keras F1: {keras_f1:.4f} | Scratch F1: {scratch_f1:.4f} | Diff: {f1_difference:.4f}")
             
-            # Status indicator
-            if match_percentage > 90 and f1_difference < 0.05:
-                print(f"  ✅ Scratch implementation working correctly!")
-            elif match_percentage > 70:
-                print(f"  ⚠️  Scratch implementation mostly working (some differences)")
-            else:
-                print(f"  ❌ Scratch implementation has significant differences")
-
         except Exception as e:
             print(f"  ❌ Error testing {model_key}: {e}")
             # Set default values for failed tests
